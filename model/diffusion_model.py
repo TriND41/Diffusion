@@ -51,10 +51,8 @@ class DiffusionModel(nn.Module):
 
         return x
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         batch_size = x.size(0)
-
-        noise = torch.randn(x.size(), dtype=x.dtype, device=x.device)
         t = torch.randint(0, self.timesteps, [batch_size], device=x.device)
         
         x = self.sample_noise(x, t, noise)
