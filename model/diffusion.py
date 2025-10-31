@@ -3,7 +3,7 @@ import torch.nn as nn
 from model.modules.u_net import UNet
 from model.utils.scheduling import linear_beta_schedule
 
-class DiffusionModel(nn.Module):
+class Diffusion(nn.Module):
     def __init__(
         self,
         channels: int,
@@ -27,15 +27,15 @@ class DiffusionModel(nn.Module):
         self.model = UNet(channels, channels, n_conditions, bilinear)
     
     def sample_noise(self, x_0: torch.Tensor, t: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
-        sqrt_alpha_t = self.sqrt_alphas_cumprod[t][:, None, None, None]
-        sqrt_minus_one_alpha_t = self.sqrt_one_minus_alphas_cumprod[t][:, None, None, None]
-        return sqrt_alpha_t * x_0 + sqrt_minus_one_alpha_t * noise
+        sqrt_alpha_cumprod_t = self.sqrt_alphas_cumprod[t][:, None, None, None]
+        sqrt_one_minus_alpha_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t][:, None, None, None]
+        return sqrt_alpha_cumprod_t * x_0 + sqrt_one_minus_alpha_cumprod_t * noise
     
     def reverse(self, x: torch.Tensor, t: int) -> torch.Tensor:
         batch_size = x.size(0)
+        t_tensor = torch.full([batch_size], fill_value=t, dtype=torch.int32, device=x.device)
 
         epsilon_t = self.model(x) # Predict Noise
-        t_tensor = torch.full([batch_size], fill_value=t, dtype=torch.int32, device=x.device)
 
         alpha_t = self.alphas[t_tensor][:, None, None, None]
         sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t_tensor][:, None, None, None]
@@ -47,6 +47,7 @@ class DiffusionModel(nn.Module):
             beta_t = self.betas[t_tensor][:, None, None, None]
             alpha_cumprod_t_minus_one = self.sqrt_alphas_cumprod[t_tensor-1][:, None, None, None]
             alpha_cumprod_t = self.alphas_cumprod[t_tensor][:, None, None, None]
+            
             x += ((1 - alpha_cumprod_t_minus_one) / (1 - alpha_cumprod_t)) * beta_t * noise
 
         return x
@@ -55,7 +56,7 @@ class DiffusionModel(nn.Module):
         batch_size = x.size(0)
         t = torch.randint(0, self.timesteps, [batch_size], device=x.device)
         
-        x = self.sample_noise(x, t, noise)
-        x = self.model(x)
+        x = self.sample_noise(x, t, noise) 
+        x = self.model(x, t) # Predict Noise
 
         return x

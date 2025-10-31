@@ -4,7 +4,7 @@ from model.utils.conv import DoubleConv
 from model.utils.conv import UpConv, DownConv
 
 class UNet(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, bilinear: bool = False) -> None:
+    def __init__(self, in_channels: int, out_channels: int, timesteps: int, bilinear: bool = False) -> None:
         super().__init__()
         factor = 2 if bilinear else 1
 
@@ -14,6 +14,9 @@ class UNet(nn.Module):
         self.down_2 = DownConv(128, 256)
         self.down_3 = DownConv(256, 512)
         self.down_4 = DownConv(512, 1024 // factor)
+
+        # Bottle Neck
+        self.time_embedding = nn.Embedding(timesteps, 1024)
         
         # Up Side
         self.up_1 = UpConv(1024, 512 // factor, bilinear)
@@ -22,13 +25,16 @@ class UNet(nn.Module):
         self.up_4 = UpConv(128, 64, bilinear)
         self.out_conv = nn.Conv2d(64, out_channels, kernel_size=1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         # Down Side
         x1 = self.in_conv(x)
         x2 = self.down_1(x1)
         x3 = self.down_2(x2)
         x4 = self.down_3(x3)
         x5 = self.down_4(x4)
+
+        # Bottle Neck
+        x5 += self.time_embedding(t)[:, None, None, None]
 
         # Up Side
         x = self.up_1(x5, x4)
