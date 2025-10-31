@@ -30,14 +30,34 @@ class DiffusionModel(nn.Module):
         sqrt_alpha_t = self.sqrt_alphas_cumprod[t][:, None, None, None]
         sqrt_minus_one_alpha_t = self.sqrt_one_minus_alphas_cumprod[t][:, None, None, None]
         return sqrt_alpha_t * x_0 + sqrt_minus_one_alpha_t * noise
+    
+    def reverse(self, x: torch.Tensor, t: int) -> torch.Tensor:
+        batch_size = x.size(0)
 
-    def forward(self, x: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
+        epsilon_t = self.model(x) # Predict Noise
+        t_tensor = torch.full([batch_size], fill_value=t, dtype=torch.int32, device=x.device)
+
+        alpha_t = self.alphas[t_tensor][:, None, None, None]
+        sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t_tensor][:, None, None, None]
+
+        x = (1 / torch.sqrt(alpha_t)) * (x - (1 - alpha_t)/(sqrt_one_minus_alphas_cumprod_t) * epsilon_t)
+
+        if t > 0:
+            noise = torch.randn(x.size(), dtype=x.dtype, device=x.device)
+            beta_t = self.betas[t_tensor][:, None, None, None]
+            alpha_cumprod_t_minus_one = self.sqrt_alphas_cumprod[t_tensor-1][:, None, None, None]
+            alpha_cumprod_t = self.alphas_cumprod[t_tensor][:, None, None, None]
+            x += ((1 - alpha_cumprod_t_minus_one) / (1 - alpha_cumprod_t)) * beta_t * noise
+
+        return x
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size = x.size(0)
 
         noise = torch.randn(x.size(), dtype=x.dtype, device=x.device)
         t = torch.randint(0, self.timesteps, [batch_size], device=x.device)
         
         x = self.sample_noise(x, t, noise)
-        x = self.model(x, cond)
+        x = self.model(x)
 
         return x
