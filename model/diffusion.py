@@ -7,7 +7,6 @@ class Diffusion(nn.Module):
     def __init__(
         self,
         channels: int,
-        n_conditions: int,
         bilinear: bool = False,
         timesteps: int = 1000
     ) -> None:
@@ -24,7 +23,7 @@ class Diffusion(nn.Module):
         self.register_buffer('sqrt_alphas_cumprod', sqrt_alphas_cumprod)
         self.register_buffer('sqrt_one_minus_alphas_cumprod', sqrt_one_minus_alphas_cumprod)
 
-        self.model = UNet(channels, channels, n_conditions, bilinear)
+        self.model = UNet(channels, channels, timesteps, bilinear)
     
     def sample_noise(self, x_0: torch.Tensor, t: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         sqrt_alpha_cumprod_t = self.sqrt_alphas_cumprod[t][:, None, None, None]
