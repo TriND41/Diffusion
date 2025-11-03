@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from model.diffusion import Diffusion
 from resolvers.image import ImageProcessor
-from handlers.configs import DiffusionConfig
+from handlers.configs import DiffusionConfig, ImageProcessorConfig
 from handlers.checkpoint import load_checkpoint
 from handlers.symbols import CheckpointKey
 import logging
@@ -17,13 +17,20 @@ class Executor:
         checkpoint = load_checkpoint(checkpoint_path)
         logger.info(f"Loaded Checkpoint from {checkpoint_path}")
 
+        # Declare Model
         hyper_params = DiffusionConfig(**checkpoint[CheckpointKey.HYPER_PARAMS])
         self.model = Diffusion(**hyper_params.__dict__)
         self.model.load_state_dict(checkpoint[CheckpointKey.MODEL])
         self.model.eval()
         self.model.to(device)
 
-        self.image_processor = ImageProcessor(**checkpoint[CheckpointKey.IMAGE_PROCESSOR])
+        # Declare Processing
+        image_configs = ImageProcessorConfig(**checkpoint[CheckpointKey.IMAGE_PROCESSOR])
+        self.image_processor = ImageProcessor(**image_configs.__dict__)
+        
+        # Declare Info
+        self.input_channels = image_configs.input_channels
+        self.input_size = image_configs.input_size
         self.timesteps = hyper_params.timesteps
         self.device = device
     
@@ -31,7 +38,7 @@ class Executor:
     @torch.inference_mode()
     def run(self) -> np.ndarray:
         samples = torch.randn(
-            (1, self.image_processor.input_channels, self.image_processor.input_size, self.image_processor.input_size),
+            (1, self.input_channels, self.input_size, self.input_size),
             dtype=torch.float,
             device=self.device
         )
