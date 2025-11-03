@@ -23,7 +23,7 @@ import handlers.gradient as gradient
 import torchsummary
 from tqdm import tqdm
 import logging
-from typing import Literal, Optional, Tuple, Dict, Any
+from typing import Literal, Optional, Dict, Any
 
 class Trainer:
     def __init__(
@@ -239,9 +239,38 @@ class Trainer:
 
             # Validation
             if val_dataloader is not None:
-                pass
+                self.__validate(val_dataloader, fp16=fp16)
             
             # Early stop
             if self.rank == 0:
                 if self.early_stopping is not None and self.early_stopping.early_stop():
                     break
+
+    def __validate(self, dataloader: DataLoader, fp16: bool = False) -> None:
+        self.model.eval()
+        val_loss = 0.0
+        
+        with torch.no_grad():
+            for inputs in tqdm(dataloader):
+                inputs = torch.tensor(inputs, dtype=torch.float, device=self.rank)
+                noises = torch.randn(inputs.size(), dtype=torch.float, device=self.rank)
+
+                with torch.autocast(device_type='cuda', enabled=fp16):
+                    outputs = self.model(inputs, noises)
+                    with torch.autocast(device_type='cuda', enabled=False):
+                        loss = self.criterion.mse_loss(outputs, noises)
+            
+                val_loss += loss
+
+        val_loss /= len(dataloader)
+        if distributed.is_initialized():
+            distributed.all_reduce(val_loss, op=distributed.ReduceOp.AVG)
+
+        if self.rank == 0:
+            print(f"Validation Loss: {(val_loss):4f}")
+
+            if self.logger is not None:
+                self.logger.log({'val_loss': val_loss}, self.n_steps)
+
+            if self.early_stopping is not None:
+                self.early_stopping.step(val_loss)
